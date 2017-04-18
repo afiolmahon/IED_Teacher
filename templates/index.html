@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Web Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.css') }}" />
+    <script src="{{ url_for('static', filename='js/bootstrap.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.js') }}"></script>
+    <script>
+        var count = 30; // Time for counter
+        var counter = -1; // Placeholder ID
+
+
+        function start() {
+            count = document.getElementById('q_time').value * 10;
+            if (counter == -1) {
+                counter = setInterval(timer, 100);
+            }
+            var start_b = document.getElementById('start');
+            start_b.style.display = 'none';
+            var running_b = document.getElementById('running');
+            running_b.style.display = 'block';
+        }
+
+        function timer() {
+            if (count <= 0) {
+                clearInterval(counter);
+                counter = -1;
+                var start_b = document.getElementById('start');
+                var running_b = document.getElementById('running');
+                start_b.style.display = 'block';
+                running_b.style.display = 'none';
+                return;
+            }
+            count--;
+            document.getElementById("timer").innerHTML=count /10+ " secs";
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+            <a class="btn btn-success btn-block" id='start' href="#" onClick="start();">Ask Question</a>
+            <a style="display:none;" class="btn btn-danger btn-block" id='running' href="#" onClick="#"><span id="timer">Timer</span></a>
+            <a class="btn btn-success btn-block" href="{{ url_for('start_question') }}">Ask Question</a>
+            <a class="btn btn-warning btn-block" href="{{ url_for('clear_question') }}">Clear Question</a>
+            <div class="form-group">
+                <label for="q_time">Response Time (Seconds)</label>
+                <input type="number" class="form-control" id="q_time" placeholder="Time" value="5"/>
+            </div>
+    </div>
+</body>
+</html>
