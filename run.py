@@ -6,9 +6,8 @@ import flask
 import threading
 
 
-''' Flask Configuration '''
+# FLASK CONFIGURATION
 app = flask.Flask(__name__)
-
 
 @app.route('/')
 def index():
@@ -17,47 +16,35 @@ def index():
 
 @app.route('/question_start')
 def start_question():
-    global polling
-    polling = True
-    with rf_lock:
-        print('Starting Question')
-        r.write([classroom, device_id, 10, 0, 0x00, 0x00, 0x00, 0x00])
-    com_thread = threading.Thread(target=poll_student)
-    com_thread.start()
+    poll_thread = threading.Thread(target=poll_student)
+    poll_thread.start()
     return flask.redirect(flask.url_for('index'))
 
 
 @app.route('/clear')
 def clear_question():
     global polling
-    polling = False
-    with rf_lock:
-        print('Clearing LEDs...')
-        r.write([classroom, device_id, 33, 0, 0x00, 0x00, 0x00, 0x00])
+    polling = False  # Stops Poll thread if it's running
+    print('Clearing LEDs...')
+    r_write(33)
     return flask.redirect(flask.url_for('index'))
 
 
-""" Radio Configuration """
+# RADIO CONFIGURATION
 
 NAMES = {32: 'Student 1'} # Device ID Alias for teacher interface
-
-answers = [] # Records device ids that have responded to question
-
 w_pipes = { # pipes for writing to a device id
     32: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2]
 }
-
 r_pipes = { # pipes for reading from a device id
     32: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7]
 }
+answers = [] # Records device ids that have responded to question
 
 r = NRF24()
-
-classroom = 0x00
-device_id = 32
-
 rf_lock = threading.Lock()  # Regulates access to RF Radio
-
+CLASS_ID = 0x00
+device_id = 32
 polling = False
 
 """
@@ -82,26 +69,28 @@ def setup_radio(details=True, write_pipe=w_pipes[32], read_pipe=w_pipes[32]):
     r.enableAckPayload()
     r.openReadingPipe(1, read_pipe)
     r.openWritingPipe(write_pipe)
-
     r.startListening()
     r.stopListening()
     if details:
         r.printDetails()
 
 
+def r_write(opcode, operand=0, dev_id=device_id, class_id=0):
+    payload = [class_id, dev_id, opcode, operand, 0x00, 0x00, 0x00, 0x00]
+    with rf_lock:
+        for itr in range(0, 40): # Retry many times
+            if r.write(payload):
+                print('Wrote after {}'.format(itr))
+                return True
+    return False
+
 def handle_recv(buff):
     device = buff[1]
     opcode = buff[2]
-
     if opcode == 17:  # Button Closed Opcode
-        r.write([classroom, device_id, 32, 0, 0x00, 0x00, 0x00, 0x00])
+        r_write(32)
         answers.append(device_id)
         #print(NAMES[device] + ' Button Pressed')
-    elif opcode == 18:  # Button Open Opcode
-        #print(NAMES[device] + ' Button not Pressed')
-        pass
-    else:
-        pass
 
 def read_resp(retry=1, avails=20):
     buff = [0, 0, 0, 0, 0, 0, 0, 0]
@@ -112,31 +101,31 @@ def read_resp(retry=1, avails=20):
             unavail += 1
             time.sleep(1/1000.0)
         r.read(buff)
-        if len(buff) > 0:  # Check if data is available
+        if buff != [0,0,0,0,0,0,0,0]:  # Check if data is available
             r.stopListening()
             return buff
     r.stopListening()
     return None
 
 
-def poll_student(duration=3, dev_id=32):
+def poll_student(duration=3):
+    print('Starting Question')
+    print('Write Color', r_write(10))  # Set Device to answer Color
+    global polling
+    polling = True
     start_t = time.time()
     print('Checking device')
     while time.time()-start_t < duration and polling:
-        print('main...')
-        with rf_lock:
-            print('WRITE STATUS',r.write([classroom, device_id, 16, 0, 0, 0, 0, 0]))
-            buff = read_resp()
-            if buff:
-                handle_recv(buff)
-            else:
-                print('Bad Comms', dev_id)
-    with rf_lock:
-        r.write([classroom, device_id, 33, 0, 0, 0, 0, 0])
+        time.sleep(1/100)
+        buff = read_resp()
+        if buff:
+            handle_recv(buff)
+    r_write(33)
+    polling = False
     print('Polling Stopped', polling)
 
 
-""" Execution Code """
+#  Execution Code
 if __name__ == "__main__":
     setup_radio(details=True)
     app.debug = True
