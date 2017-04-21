@@ -13,19 +13,22 @@
 
         function start() {
             count = document.getElementById('q_time').value * 10;
-            if (counter == -1) {
-                counter = setInterval(timer, 100);
+            if (counter == -1) { // if no counter
+                counter = setInterval(timer, 100); // create a counter to run timer
             }
             var start_b = document.getElementById('start');
             start_b.style.display = 'none';
             var running_b = document.getElementById('running');
             running_b.style.display = 'block';
+            $.get( "{{ url_for('start_question') }}", function( data ) {
+
+            });
         }
 
         function timer() {
             if (count <= 0) {
-                clearInterval(counter);
-                counter = -1;
+                clearInterval(counter); // stops the counter when it ends
+                counter = -1; // ID released
                 var start_b = document.getElementById('start');
                 var running_b = document.getElementById('running');
                 start_b.style.display = 'block';
@@ -41,8 +44,7 @@
     <div class="container">
             <a class="btn btn-success btn-block" id='start' href="#" onClick="start();">Ask Question</a>
             <a style="display:none;" class="btn btn-danger btn-block" id='running' href="#" onClick="#"><span id="timer">Timer</span></a>
-            <a class="btn btn-success btn-block" href="{{ url_for('start_question') }}">Ask Question</a>
-            <a class="btn btn-warning btn-block" href="{{ url_for('clear_question') }}">Clear Question</a>
+            <a class="btn btn-warning btn-block" href="{{ url_for('clear_question') }}">Clear Answers</a>
             <div class="form-group">
                 <label for="q_time">Response Time (Seconds)</label>
                 <input type="number" class="form-control" id="q_time" placeholder="Time" value="5"/>
