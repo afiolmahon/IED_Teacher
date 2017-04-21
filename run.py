@@ -27,6 +27,7 @@ def clear_question():
     polling = False  # Stops Poll thread if it's running
     print('Clearing LEDs...')
     r_write(33)
+    print('write complete...')
     return flask.redirect(flask.url_for('index'))
 
 
@@ -39,7 +40,6 @@ w_pipes = { # pipes for writing to a device id
 r_pipes = { # pipes for reading from a device id
     32: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7]
 }
-answers = [] # Records device ids that have responded to question
 
 r = NRF24()
 rf_lock = threading.Lock()  # Regulates access to RF Radio
@@ -58,12 +58,13 @@ operations
 """
 
 
-def setup_radio(details=True, write_pipe=w_pipes[32], read_pipe=w_pipes[32]):
+def setup_radio(details=True, write_pipe=w_pipes[32], read_pipe=r_pipes[32]):
     r.begin(0, 0, 17, 0) #Set CE and IRQ pins
     r.setRetries(15, 15)
-    r.setPayloadSize(8)
+    #r.setPayloadSize(8)
     r.setChannel(0x60)
     r.setDataRate(NRF24.BR_250KBPS)
+    r.enableDynamicPayloads();
     r.setPALevel(NRF24.PA_MAX)
     r.setAutoAck(1)
     r.enableAckPayload()
@@ -77,52 +78,62 @@ def setup_radio(details=True, write_pipe=w_pipes[32], read_pipe=w_pipes[32]):
 
 def r_write(opcode, operand=0, dev_id=device_id, class_id=0):
     payload = [class_id, dev_id, opcode, operand, 0x00, 0x00, 0x00, 0x00]
-    with rf_lock:
-        for itr in range(0, 40): # Retry many times
-            if r.write(payload):
-                print('Wrote after {}'.format(itr))
-                return True
+    rf_lock.acquire()
+    if r.write(payload):
+        print('<<', payload)
+        rf_lock.release()
+        return True
+    rf_lock.release()
     return False
 
-def handle_recv(buff):
-    device = buff[1]
-    opcode = buff[2]
-    if opcode == 17:  # Button Closed Opcode
-        r_write(32)
-        answers.append(device_id)
-        #print(NAMES[device] + ' Button Pressed')
 
-def read_resp(retry=1, avails=20):
+def read_resp(max_retry=20):
     buff = [0, 0, 0, 0, 0, 0, 0, 0]
-    unavail = 0
+    retry = 0
+    rf_lock.acquire()
     r.startListening()
-    for i in range(0, retry):  # try 20 times
-        while not r.available() and unavail <= avails:
-            unavail += 1
-            time.sleep(1/1000.0)
-        r.read(buff)
-        if buff != [0,0,0,0,0,0,0,0]:  # Check if data is available
-            r.stopListening()
-            return buff
+    while not r.available() and retry < max_retry:
+        retry += 1
+        time.sleep(1/1000.0)
+    if r.read(buff):
+        r.stopListening()
+        rf_lock.release()
+        print('>>', buff)
+        return buff
     r.stopListening()
+    rf_lock.release()
     return None
 
 
-def poll_student(duration=3):
-    print('Starting Question')
-    print('Write Color', r_write(10))  # Set Device to answer Color
+def poll_student(dev_id=32, duration=3):
+    answers = {}
+
+    def handle_recv(buff):
+        device = buff[1]
+        opcode = buff[2]
+        if opcode == 17:  # Button Closed Opcode
+            r_write(32)
+            answers[device_id] = True
+            print(NAMES[device] + ' Button Pressed')
+
     global polling
     polling = True
     start_t = time.time()
-    print('Checking device')
-    while time.time()-start_t < duration and polling:
+    print('poll_student Question')
+    print('Write Color', r_write(10))  # Set Device to answer Color
+    while time.time() - start_t < duration and polling:
+        r_write(16)
         time.sleep(1/100)
         buff = read_resp()
         if buff:
             handle_recv(buff)
-    r_write(33)
+
+
+
+    if dev_id not in answers:
+        r_write(33)
     polling = False
-    print('Polling Stopped', polling)
+    return answers
 
 
 #  Execution Code
