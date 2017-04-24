@@ -4,39 +4,34 @@ from nrf24 import NRF24
 
 import flask
 import threading
+import os
+import json
 
+os.nice(-19)
 
 # FLASK CONFIGURATION
 app = flask.Flask(__name__)
 
 # RADIO CONFIGURATION
-
 NAMES = {
         32: 'Student 1',
         33: 'Student 2'
         } # Device ID Alias for teacher interface
 
+devices = [32, 33]
 
-w_pipes = { # pipes for writing to a device id
+pipes = {
     32: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2],
-    #32: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2],
     33: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7]
 }
-r_pipes = { # pipes for reading from a device id
-    32: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2],
-    #32: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7],
-    33: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7],
-    #33: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2]
-}
+
+answers = []
 
 r = NRF24()
 rf_lock = threading.Lock()  # Regulates access to RF Radio
 CLASS_ID = 0x00
 device_id = 32
 polling = False
-
-devices = [32, 33]
-
 
 @app.route('/')
 def index():
@@ -50,14 +45,30 @@ def start_question():
     return flask.redirect(flask.url_for('index'))
 
 
-@app.route('/clear')
-def clear_question():
+@app.route('/question_stop')
+def q_stop():
     global polling
-    polling = False  # Stops Poll thread if it's running
-    print('Clearing LEDs...')
+    polling = False
     for dev_id in devices:
         r_write(33, dev_id)
-    print('write complete...')
+    students = []
+    for sid in answers:
+        students.append(NAMES[sid])
+    return json.dumps(students)
+
+@app.route('/next_ans')
+def next_ans():
+    print(answers)
+    if len(answers) > 0:
+        next_dev = answers.pop(0)
+        print(answers)
+        for dev_id in devices:
+            if not dev_id == next_dev:
+                r_write(33, dev_id)
+        r_write(35, next_dev)
+    else:
+        for dev_id in devices:
+            r_write(33, dev_id)
     return flask.redirect(flask.url_for('index'))
 
 
@@ -68,11 +79,11 @@ operations
 18 - button off - student
 32 - light up LED - teacher
 33 - light off LED - teacher
-34 - AK, light change - student
+34 - light up yellow - teacher
 """
 
 
-def setup_radio(details=True, write_pipe=w_pipes[32], read_pipe=r_pipes[32]):
+def setup_radio(details=True, write_pipe=pipes[32], read_pipe=pipes[32]):
     r.begin(0, 0, 17, 0) #Set CE and IRQ pins
     r.setRetries(15, 15)
     #r.setPayloadSize(8)
@@ -90,23 +101,28 @@ def setup_radio(details=True, write_pipe=w_pipes[32], read_pipe=r_pipes[32]):
         r.printDetails()
 
 
-def r_write(opcode, dev_id, operand=0, class_id=0):
+def r_write(opcode, dev_id, operand=0, class_id=0, retry=5):
     payload = [class_id, dev_id, opcode, operand, 0x00, 0x00, 0x00, 0x00]
+    success = False
     rf_lock.acquire()
-    r.openWritingPipe(w_pipes[dev_id]) # Open correct com pipe
-    if r.write(payload):
-        print('OUT <<', payload)
-        rf_lock.release()
-        return True
+    r.openWritingPipe(pipes[dev_id]) # Open correct com pipe
+
+    attempt = 0 # Retry iterator
+    while attempt < retry:
+        attempt += 1
+        success = r.write(payload)
+        if success:
+            print('OUT <<', payload)
+            break
     rf_lock.release()
-    return False
+    return success
 
 
 def read_resp(dev_id, max_retry=20):
     buff = [0, 0, 0, 0, 0, 0, 0, 0]
     retry = 0
     rf_lock.acquire()
-    r.openReadingPipe(1, r_pipes[dev_id])
+    r.openReadingPipe(1, pipes[dev_id])
     r.startListening()
     while not r.available() and retry < max_retry:
         retry += 1
@@ -121,24 +137,26 @@ def read_resp(dev_id, max_retry=20):
     return None
 
 
-def poll_student(duration=6):
-    answers = {}
+def poll_student():
+    global answers
+    global polling
+    answers = []
+    polling = True
 
     def handle_recv(buff):
         device = buff[1]
         opcode = buff[2]
         if opcode == 17:  # Button Closed Opcode
             r_write(32, device)
-            answers[device] = True
+            if device not in answers:
+                answers.append(device)
             print(NAMES[device] + ' Button Pressed')
 
-    global polling
-    polling = True
-    start_t = time.time()
     print('poll_student Question')
     for dev_id in devices:
         print('Write Color', r_write(10, dev_id))  # Set Device to answer Color
-    while time.time() - start_t < duration and polling:
+
+    while polling:
         for dev in devices:
             r_write(16, dev)
             time.sleep(1/100)
