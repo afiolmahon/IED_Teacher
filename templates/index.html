@@ -26,21 +26,19 @@
           var start_b = document.getElementById('start');
           var stop_b = document.getElementById('stop');
           var ans_b = document.getElementById('next');
+          var resp_p = document.getElementById('resp_panel');
           start_b.style.display = 'block';
           stop_b.style.display = 'none';
           ans_b.style.display = 'block';
           resp_p.style.display = 'block'
-          $.get( "{{ url_for('q_stop') }}", function( data ) {});
-          $.getJSON( "{{ url_for('q_stop') }}", function( data ) {
+
+          $.getJSON( "{{ url_for('stop_question') }}", function( data ) {
+            $('#resp_body').empty();
             for (var i = 0, len = data.length; i < len; i++) {
-              add_row(i+1, data[i]);
+              $('#resp_body').append('<tr><td>'+(i+1)+'</td><td>'+data[i]+'</td></tr>');
             }
           });
 
-        }
-
-        function add_row(num, name) {
-          $('#responses tr:last').after('<tr><td>'+num+'</td><td>'+name+'</td></tr>');
         }
 
         function next() {
@@ -62,7 +60,8 @@
         <thead>
           <tr><th>Answer</th><th>Student</th></tr>
         </thead>
-        <tbody>
+        <tbody id='resp_body'>
+
         </tbody>
       </table>
     </div>

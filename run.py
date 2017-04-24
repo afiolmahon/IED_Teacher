@@ -46,7 +46,8 @@ def start_question():
 
 
 @app.route('/question_stop')
-def q_stop():
+def stop_question():
+    print("STOPPING")
     global polling
     polling = False
     for dev_id in devices:
@@ -54,7 +55,9 @@ def q_stop():
     students = []
     for sid in answers:
         students.append(NAMES[sid])
+    print(students)
     return json.dumps(students)
+
 
 @app.route('/next_ans')
 def next_ans():
