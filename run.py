@@ -19,11 +19,14 @@ NAMES = {
 
 w_pipes = { # pipes for writing to a device id
     32: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2],
+    #32: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2],
     33: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7]
 }
 r_pipes = { # pipes for reading from a device id
-    32: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7],
-    33: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2]
+    32: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2],
+    #32: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7],
+    33: [0xe7, 0xe7, 0xe7, 0xe7, 0xe7],
+    #33: [0xc2, 0xc2, 0xc2, 0xc2, 0xc2]
 }
 
 r = NRF24()
@@ -92,7 +95,7 @@ def r_write(opcode, dev_id, operand=0, class_id=0):
     rf_lock.acquire()
     r.openWritingPipe(w_pipes[dev_id]) # Open correct com pipe
     if r.write(payload):
-        print('<<', payload)
+        print('OUT <<', payload)
         rf_lock.release()
         return True
     rf_lock.release()
@@ -111,7 +114,7 @@ def read_resp(dev_id, max_retry=20):
     if r.read(buff):
         r.stopListening()
         rf_lock.release()
-        print('>>', buff)
+        print('IN >>', buff)
         return buff
     r.stopListening()
     rf_lock.release()
